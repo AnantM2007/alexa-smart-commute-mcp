@@ -1,0 +1,7 @@
+# Core Streamable HTTP MCP server runs natively on Python 3.8+ standard library:
+# (http.server.ThreadingHTTPServer, urllib.request, json)
+# No external pip packages are required to run server.py!
+
+# Optional packages if deploying behind an external ASGI runner:
+uvicorn>=0.30.0
+fastapi>=0.115.0

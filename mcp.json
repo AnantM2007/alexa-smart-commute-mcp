@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "SmartCommuteAlexaPlus": {
+      "type": "http",
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}

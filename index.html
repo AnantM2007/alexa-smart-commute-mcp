@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Alexa+ SmartCommute Live MCP Simulator</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: #0b0f19; color: #f1f5f9; margin: 0; padding: 24px; display: flex; justify-content: center; }
+    .container { max-width: 850px; width: 100%; background: #111827; border: 1px solid #1f2937; border-radius: 20px; padding: 28px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1f2937; padding-bottom: 16px; margin-bottom: 20px; }
+    .alexa-badge { display: flex; align-items: center; gap: 12px; }
+    .orb { width: 18px; height: 18px; border-radius: 50%; background: #00caef; box-shadow: 0 0 15px #00caef; animation: pulse 1.8s infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.25); opacity: 0.7; } }
+    .mcp-tag { background: #1e293b; color: #38bdf8; padding: 6px 12px; border-radius: 99px; font-size: 12px; font-weight: 600; border: 1px solid #0284c7; }
+    .controls { display: grid; grid-template-columns: 1fr 1fr 120px auto; gap: 10px; margin-bottom: 20px; }
+    input { background: #1f2937; border: 1px solid #374151; color: white; padding: 12px; border-radius: 10px; font-size: 14px; }
+    button { background: linear-gradient(135deg, #00caef, #0284c7); color: #000; font-weight: 700; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; }
+    .voice-box { background: #1e293b; border-left: 4px solid #00caef; padding: 16px; border-radius: 10px; margin-bottom: 20px; display: none; }
+    .voice-title { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #38bdf8; margin-bottom: 6px; font-weight: 700; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .card { background: #1f2937; border: 1px solid #374151; border-radius: 12px; padding: 16px; position: relative; }
+    .card.viable { border-color: #10b981; }
+    .card.rejected { opacity: 0.5; border-color: #ef4444; }
+    .badge { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+    .badge.fast { background: #065f46; color: #34d399; }
+    .badge.cheap { background: #1e3a8a; color: #93c5fd; }
+    .badge.late { background: #7f1d1d; color: #fca5a5; }
+    .metrics { display: flex; gap: 16px; margin: 12px 0; font-size: 20px; font-weight: 700; }
+    .cost { color: #34d399; }
+    .time { color: #f8fafc; }
+    .desc { font-size: 13px; color: #9ca3af; margin: 0; }
+    .log-box { margin-top: 20px; background: #090d16; border: 1px solid #1f2937; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 12px; color: #10b981; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="alexa-badge">
+        <div class="orb"></div>
+        <div>
+          <h2 style="margin:0; font-size:20px;">Alexa+ SmartCommute (Live GPS + OSRM API)</h2>
+          <span style="font-size:12px; color:#9ca3af;">Real-Time Multimodal Route & Fare MCP Tool</span>
+        </div>
+      </div>
+      <div class="mcp-tag">MCP Spec 2025-11-25+ | Streamable HTTP</div>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="origin" value="Connaught Place, Delhi" placeholder="Origin">
+      <input type="text" id="dest" value="Hauz Khas, Delhi" placeholder="Destination">
+      <input type="number" id="deadline" value="35" placeholder="Max Mins">
+      <button id="askBtn" onclick="runCommuteTool()">Ask Alexa+</button>
+    </div>
+
+    <div id="voiceBox" class="voice-box">
+      <div class="voice-title">🔊 Alexa+ Spoken Response</div>
+      <div id="voiceText" style="font-size: 15px; line-height: 1.5;"></div>
+    </div>
+
+    <div id="cardsGrid" class="cards"></div>
+    <div id="mcpLog" class="log-box"></div>
+  </div>
+
+  <script>
+    async function runCommuteTool() {
+      const origin = document.getElementById('origin').value;
+      const dest = document.getElementById('dest').value;
+      const maxTime = parseInt(document.getElementById('deadline').value) || 35;
+      const btn = document.getElementById('askBtn');
+
+      btn.innerText = "Calculating Live Route...";
+      const payload = {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "find_best_commute", arguments: { origin: origin, destination: dest, max_time_minutes: maxTime } }
+      };
+
+      try {
+        const res = await fetch("http://localhost:8000/mcp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const rpc = await res.json();
+        const data = rpc.result.content ? JSON.parse(rpc.result.content[0].text) : rpc.result;
+
+        document.getElementById('voiceBox').style.display = 'block';
+        document.getElementById('mcpLog').style.display = 'block';
+        document.getElementById('voiceText').innerText = `"${data.alexa_voice_response}"`;
+
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(data.alexa_voice_response));
+        }
+
+        const grid = document.getElementById('cardsGrid');
+        grid.innerHTML = '';
+        const allRoutes = [...(data.viable_routes || []), ...(data.filtered_out_slow_routes || [])];
+
+        allRoutes.forEach(r => {
+          const isViable = r.time_mins <= maxTime;
+          let badge = '';
+          if (!isViable) badge = `<span class="badge late">Exceeds ${maxTime}m Limit</span>`;
+          else if (data.recommended_fastest && r.mode === data.recommended_fastest.mode) badge = `<span class="badge fast">⚡ Fastest</span>`;
+          else if (data.recommended_cheapest && r.mode === data.recommended_cheapest.mode) badge = `<span class="badge cheap">💰 Cheapest</span>`;
+
+          grid.innerHTML += `
+            <div class="card ${isViable ? 'viable' : 'rejected'}">
+              ${badge}
+              <h3 style="margin:0 0 4px 0; font-size:16px;">${r.mode}</h3>
+              <div class="metrics">
+                <span class="time">⏱️ ${r.time_mins} mins</span>
+                <span class="cost">₹${r.cost_inr}</span>
+              </div>
+              <p class="desc">${r.details}</p>
+            </div>
+          `;
+        });
+
+        document.getElementById('mcpLog').innerText =
+          `[LIVE MCP HTTP 200 OK] Distance: ${data.real_distance_km || data.distance_km} km | JSON-RPC Call -> http://localhost:8000/mcp`;
+      } catch (err) {
+        alert("Make sure 'python server.py' is running in your terminal window!");
+      }
+      btn.innerText = "Ask Alexa+";
+    }
+
+    window.onload = runCommuteTool;
+  </script>
+</body>
+</html>
